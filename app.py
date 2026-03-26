@@ -1,163 +1,162 @@
-# =====================================
-# Study Cafe Kiosk System (Pro Version)
-# SignUp + Login + Seat + Logout
-# Google Colab Compatible
-# =====================================
+import streamlit as st
+import streamlit.components.v1 as components
 
-ROWS, COLS = 5, 6
-EMPTY, USED = 0, 1
+# 1. 페이지 설정 (이 코드가 가장 먼저 와야 합니다)
+st.set_page_config(page_title="오목 게임 프로젝트", layout="centered")
 
-# 사용자 데이터
-users = {
-    "admin": "0000"
-}
+st.title("🎮 학기말 프로젝트: 오목 게임")
+st.write("Streamlit과 JavaScript Canvas를 이용한 웹 애플리케이션")
 
-# 좌석 상태
-seats = [[EMPTY for _ in range(COLS)] for _ in range(ROWS)]
+# 2. 오목 게임 HTML/JS 소스 코드 (IPython 관련 모든 코드 제거)
+html_code = """
+<div style="display: flex; flex-direction: column; align-items: center; font-family: 'Malgun Gothic', sans-serif;">
+    <div style="display: flex; gap: 20px; margin-bottom: 10px;">
+        <div id="status" style="font-weight: bold; font-size: 1.2em; color: #333;">흑색 차례입니다.</div>
+        <div style="padding: 5px 15px; border: 2px solid #d9534f; border-radius: 5px; background: #fff;">
+            <span style="font-size: 0.9em; color: #666;">남은 시간: </span>
+            <span id="timer" style="font-size: 1.2em; font-weight: bold; color: #d9534f;">30</span>초
+        </div>
+    </div>
+    
+    <div style="position: relative;">
+        <canvas id="board" width="450" height="450" style="background: #ffce9e; border: 3px solid #444; cursor: crosshair; box-shadow: 0 10px 20px rgba(0,0,0,0.2);"></canvas>
+        <div id="win-overlay" style="display: none; position: absolute; top: 0; left: 0; width: 450px; height: 450px; background: rgba(0,0,0,0.6); flex-direction: column; justify-content: center; align-items: center; border-radius: 3px; z-index: 100;">
+            <div id="win-text" style="color: white; font-size: 2.5em; font-weight: bold; text-shadow: 2px 2px 10px rgba(0,0,0,0.5); margin-bottom: 20px; text-align: center;"></div>
+            <button onclick="resetGame()" style="padding: 10px 30px; font-size: 1.2em; cursor: pointer; background: #28a745; color: white; border: none; border-radius: 5px;">다시 하기</button>
+        </div>
+    </div>
+    
+    <button onclick="resetGame()" style="margin-top: 20px; padding: 10px 20px; width: 200px; cursor: pointer;">게임 초기화</button>
+</div>
 
-# 사용자별 좌석 기록
-user_seat = {}   # { user_id : (r, c) }
+<script>
+    const canvas = document.getElementById('board');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const timerDisplay = document.getElementById('timer');
+    const winOverlay = document.getElementById('win-overlay');
+    const winText = document.getElementById('win-text');
+    
+    const size = 15;
+    const cellSize = 30;
+    const padding = 15;
+    const LIMIT_TIME = 30;
+    
+    let board = Array.from({ length: size }, () => Array(size).fill(0));
+    let turn = 1; 
+    let gameOver = false;
+    let timeLeft = LIMIT_TIME;
+    let timerInterval = null;
 
-# ---------- 회원가입 ----------
-def signup():
-    print("\n📝 회원가입")
-    while True:
-        user_id = input("새 ID 입력 (취소: 0): ")
-        if user_id == "0":
-            return
-        if user_id in users:
-            print("❌ 이미 존재하는 ID입니다.")
-            continue
+    function drawBoard() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#444';
+        ctx.lineWidth = 1;
+        for (let i = 0; i < size; i++) {
+            ctx.beginPath();
+            ctx.moveTo(padding, padding + i * cellSize);
+            ctx.lineTo(padding + (size - 1) * cellSize, padding + i * cellSize);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(padding + i * cellSize, padding);
+            ctx.lineTo(padding + i * cellSize, padding + (size - 1) * cellSize);
+            ctx.stroke();
+        }
+    }
 
-        password = input("새 PW 입력: ")
-        users[user_id] = password
-        print(f"✅ 회원가입 완료! ({user_id})")
-        return
+    function drawStone(row, col, color) {
+        ctx.beginPath();
+        ctx.arc(padding + col * cellSize, padding + row * cellSize, 13, 0, Math.PI * 2);
+        const grad = ctx.createRadialGradient(
+            padding + col * cellSize - 4, padding + row * cellSize - 4, 2,
+            padding + col * cellSize, padding + row * cellSize, 13
+        );
+        if (color === 1) {
+            grad.addColorStop(0, '#666');
+            grad.addColorStop(1, '#000');
+        } else {
+            grad.addColorStop(0, '#fff');
+            grad.addColorStop(1, '#ccc');
+        }
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.strokeStyle = color === 1 ? '#000' : '#999';
+        ctx.stroke();
+    }
 
-# ---------- 로그인 ----------
-def login():
-    print("\n🔐 로그인")
-    for _ in range(3):
-        user_id = input("ID 입력: ")
-        password = input("PW 입력: ")
+    function startTimer() {
+        clearInterval(timerInterval);
+        timeLeft = LIMIT_TIME;
+        timerDisplay.innerText = timeLeft;
+        timerInterval = setInterval(() => {
+            timeLeft--;
+            timerDisplay.innerText = timeLeft;
+            if (timeLeft <= 0) endGame(turn === 1 ? 2 : 1, true);
+        }, 1000);
+    }
 
-        if user_id in users and users[user_id] == password:
-            print(f"✅ {user_id}님 환영합니다.")
-            return user_id
-        else:
-            print("❌ ID 또는 PW가 틀렸습니다.")
+    function checkWin(r, c) {
+        const directions = [[1,0], [0,1], [1,1], [1,-1]];
+        for (let [dr, dc] of directions) {
+            let count = 1;
+            let nr = r + dr, nc = c + dc;
+            while (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr][nc] === turn) {
+                count++; nr += dr; nc += dc;
+            }
+            nr = r - dr; nc = c - dc;
+            while (nr >= 0 && nr < size && nc >= 0 && nc < size && board[nr][nc] === turn) {
+                count++; nr -= dr; nc -= dc;
+            }
+            if (count >= 5) return true;
+        }
+        return false;
+    }
 
-    print("🚫 로그인 실패")
-    return None
+    function endGame(winner, isTimeOut = false) {
+        clearInterval(timerInterval);
+        gameOver = true;
+        const winnerName = winner === 1 ? "흑색(Black)" : "백색(White)";
+        winText.innerText = isTimeOut ? "시간 초과!\\n" + winnerName + " 승리" : winnerName + " 승리!";
+        winOverlay.style.display = 'flex';
+        status.innerText = "게임 종료";
+    }
 
-# ---------- 좌석 출력 ----------
-def display_seats():
-    print("\n===== 좌석 현황 =====")
-    print("□ : 빈 좌석   ■ : 사용 중")
-    print("    ", end="")
-    for c in range(COLS):
-        print(f"{c+1} ", end="")
-    print()
+    canvas.onclick = function(e) {
+        if (gameOver) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left - padding;
+        const y = e.clientY - rect.top - padding;
+        const col = Math.round(x / cellSize);
+        const row = Math.round(y / cellSize);
 
-    for r in range(ROWS):
-        print(f"{r+1}   ", end="")
-        for c in range(COLS):
-            print("□ " if seats[r][c] == EMPTY else "■ ", end="")
-        print()
-    print("=====================")
+        if (row >= 0 && row < size && col >= 0 && col < size && board[row][col] === 0) {
+            board[row][col] = turn;
+            drawStone(row, col, turn);
+            if (checkWin(row, col)) {
+                endGame(turn);
+            } else {
+                turn = turn === 1 ? 2 : 1;
+                status.innerText = (turn === 1 ? "흑색" : "백색") + " 차례입니다.";
+                startTimer();
+            }
+        }
+    };
 
-# ---------- 좌석 선택 ----------
-def select_seat(user):
-    if user in user_seat:
-        print("❌ 이미 좌석을 이용 중입니다.")
-        return
+    window.resetGame = function() {
+        board = Array.from({ length: size }, () => Array(size).fill(0));
+        turn = 1;
+        gameOver = false;
+        winOverlay.style.display = 'none';
+        status.innerText = "흑색 차례입니다.";
+        drawBoard();
+        startTimer();
+    }
 
-    while True:
-        try:
-            r = int(input("행 번호 입력 (취소: 0): "))
-            if r == 0:
-                return
+    drawBoard();
+    startTimer();
+</script>
+"""
 
-            c = int(input("열 번호 입력: "))
-            r -= 1
-            c -= 1
-
-            if r < 0 or c < 0 or r >= ROWS or c >= COLS:
-                print("❌ 존재하지 않는 좌석입니다.")
-                continue
-
-            if seats[r][c] == USED:
-                print("❌ 이미 사용 중인 좌석입니다.")
-                continue
-
-            seats[r][c] = USED
-            user_seat[user] = (r, c)
-            print(f"✅ 좌석 배정 완료 ({user})")
-            return
-
-        except ValueError:
-            print("❌ 숫자만 입력하세요.")
-
-# ---------- 로그아웃 ----------
-def logout(user):
-    if user in user_seat:
-        r, c = user_seat[user]
-        seats[r][c] = EMPTY
-        del user_seat[user]
-        print("🔓 로그아웃 완료 (좌석 해제됨)")
-    else:
-        print("ℹ️ 사용 중인 좌석이 없습니다.")
-
-# ---------- 사용자 메뉴 ----------
-def user_menu(user):
-    while True:
-        print(f"\n👤 {user}님 메뉴")
-        print("1. 좌석 선택")
-        print("2. 로그아웃 (자리 반납)")
-        print("0. 메인 화면")
-
-        choice = input("선택: ")
-
-        if choice == "1":
-            display_seats()
-            select_seat(user)
-
-        elif choice == "2":
-            logout(user)
-            return
-
-        elif choice == "0":
-            return
-
-        else:
-            print("❌ 올바른 메뉴를 선택하세요.")
-
-# ---------- 메인 키오스크 ----------
-def run_kiosk():
-    print("📌 스터디카페 키오스크 시작")
-
-    while True:
-        print("\n=== 메인 화면 ===")
-        print("1. 로그인")
-        print("2. 회원가입")
-        print("0. 종료")
-
-        choice = input("선택: ")
-
-        if choice == "1":
-            user = login()
-            if user:
-                user_menu(user)
-
-        elif choice == "2":
-            signup()
-
-        elif choice == "0":
-            print("이용해주셔서 감사합니다.")
-            break
-
-        else:
-            print("❌ 올바른 메뉴를 선택하세요.")
-
-# 실행
+# 3. Streamlit 컴포넌트로 HTML 삽입
+components.html(html_code, height=650)
 run_kiosk()
